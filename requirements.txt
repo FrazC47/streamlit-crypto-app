@@ -3,5 +3,5 @@ requests
 pandas
 matplotlib
 plotly
-bokeh
+bokeh==2.4.3
 mplfinance

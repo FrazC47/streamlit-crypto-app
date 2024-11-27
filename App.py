@@ -85,8 +85,15 @@ def recommend_trade(df, fibonacci_levels, resistance, trend):
 
     return recommendation, entry_price, stop_loss, take_profit
 
+# Function to detect trend
+def detect_trend(df):
+    recent_high = df["High"].iloc[-10:].max()
+    recent_low = df["Low"].iloc[-10:].min()
+    trend = "uptrend" if recent_high > recent_low else "downtrend"
+    return trend
+
 # Streamlit app setup
-st.title("Comprehensive Crypto Analysis with Indicators")
+st.title("Comprehensive Crypto Analysis with Trade Recommendations")
 st.sidebar.header("Settings")
 
 # Sidebar inputs
@@ -107,6 +114,10 @@ if st.sidebar.button("Fetch Data"):
                 df = calculate_indicators(df)
                 fibonacci_levels = calculate_fibonacci_levels(df)
                 resistance = calculate_resistance_levels(df)
+                trend = detect_trend(df)
+                recommendation, entry_price, stop_loss, take_profit = recommend_trade(
+                    df, fibonacci_levels, resistance, trend
+                )
 
                 # Candlestick chart with Fibonacci levels, Bollinger Bands, and Resistance
                 st.subheader(f"{symbol.capitalize()} Candlestick Chart with Indicators")
@@ -170,6 +181,16 @@ if st.sidebar.button("Fetch Data"):
                 # Display RSI as a separate chart
                 st.subheader(f"{symbol.capitalize()} Relative Strength Index (RSI)")
                 st.line_chart(df["RSI"])
+
+                # Display Trade Recommendation
+                st.subheader("Trade Recommendation")
+                st.write(f"**Recommendation**: {recommendation}")
+                st.write(f"**Entry Price**: {entry_price:.2f}")
+                st.write(f"**Stop Loss**: {stop_loss:.2f}")
+                if take_profit is not None:
+                    st.write(f"**Take Profit**: {take_profit:.2f}")
+                else:
+                    st.write("**Take Profit**: Not applicable")
 
         except Exception as e:
             st.error(f"An error occurred: {e}")

@@ -167,7 +167,7 @@ if st.sidebar.button("Fetch Data"):
         st.subheader("Primary Trade Recommendation")
         st.write(f"**Primary Recommendation**: {recommendation}")
         st.write(f"Entry: {entry_price:.2f}")
-        st.write(f"Stop Loss: {stop_loss:.2f}")
+        st.write(f"Stop Loss: {stop_loss:.2f}" if stop_loss is not None else "Stop Loss: N/A")
         st.write(
             f"Take Profit: {take_profit:.2f}" if take_profit is not None else "Take Profit: N/A"
         )
@@ -176,7 +176,11 @@ if st.sidebar.button("Fetch Data"):
         if counter_recommendation:
             st.write(f"**Counter Recommendation**: {counter_recommendation}")
             st.write(f"Entry: {counter_entry_price:.2f}")
-            st.write(f"Stop Loss: {counter_stop_loss:.2f}")
+            st.write(
+                f"Stop Loss: {counter_stop_loss:.2f}"
+                if counter_stop_loss is not None
+                else "Stop Loss: N/A"
+            )
             st.write(
                 f"Take Profit: {counter_take_profit:.2f}"
                 if counter_take_profit is not None

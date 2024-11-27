@@ -23,7 +23,12 @@ def fetch_coingecko_data(symbol="bitcoin", currency="usd", days="7", interval=No
 
 # Calculate technical indicators
 def calculate_indicators(df):
+    # Bollinger Bands
     df["SMA_20"] = df["Close"].rolling(window=20).mean()
+    df["Bollinger_Upper"] = df["SMA_20"] + (2 * df["Close"].rolling(window=20).std())
+    df["Bollinger_Lower"] = df["SMA_20"] - (2 * df["Close"].rolling(window=20).std())
+
+    # RSI
     delta = df["Close"].diff()
     gain = delta.where(delta > 0, 0).rolling(14).mean()
     loss = -delta.where(delta < 0, 0).rolling(14).mean()
@@ -82,6 +87,12 @@ def recommend_trade(df, fibonacci_levels, resistance, trend):
             counter_stop_loss = fibonacci_levels["61.8%"] * 0.98  # Stop loss below Fibonacci level
             counter_take_profit = resistance
 
+    # Ensure stop loss and take profit are always set
+    if stop_loss is None:
+        stop_loss = last_price * 0.98  # Default stop loss 2% below current price
+    if counter_stop_loss is None:
+        counter_stop_loss = last_price * 1.02  # Default counter stop loss 2% above current price
+
     return (
         recommendation,
         entry_price,
@@ -136,6 +147,26 @@ if st.sidebar.button("Fetch Data"):
             )
         )
 
+        # Add Bollinger Bands
+        fig.add_trace(
+            go.Scatter(
+                x=df["Open Time"],
+                y=df["Bollinger_Upper"],
+                mode="lines",
+                line=dict(color="blue", dash="dot"),
+                name="Bollinger Upper",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=df["Open Time"],
+                y=df["Bollinger_Lower"],
+                mode="lines",
+                line=dict(color="blue", dash="dot"),
+                name="Bollinger Lower",
+            )
+        )
+
         # Add Fibonacci levels
         for level, value in fibonacci_levels.items():
             fig.add_hline(
@@ -167,7 +198,7 @@ if st.sidebar.button("Fetch Data"):
         st.subheader("Primary Trade Recommendation")
         st.write(f"**Primary Recommendation**: {recommendation}")
         st.write(f"Entry: {entry_price:.2f}")
-        st.write(f"Stop Loss: {stop_loss:.2f}" if stop_loss is not None else "Stop Loss: N/A")
+        st.write(f"Stop Loss: {stop_loss:.2f}")
         st.write(
             f"Take Profit: {take_profit:.2f}" if take_profit is not None else "Take Profit: N/A"
         )
@@ -176,11 +207,7 @@ if st.sidebar.button("Fetch Data"):
         if counter_recommendation:
             st.write(f"**Counter Recommendation**: {counter_recommendation}")
             st.write(f"Entry: {counter_entry_price:.2f}")
-            st.write(
-                f"Stop Loss: {counter_stop_loss:.2f}"
-                if counter_stop_loss is not None
-                else "Stop Loss: N/A"
-            )
+            st.write(f"Stop Loss: {counter_stop_loss:.2f}")
             st.write(
                 f"Take Profit: {counter_take_profit:.2f}"
                 if counter_take_profit is not None

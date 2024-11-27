@@ -4,4 +4,5 @@ pandas
 matplotlib
 plotly
 bokeh==2.4.3
+numpy==1.21.0
 mplfinance

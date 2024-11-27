@@ -32,7 +32,12 @@ def plot_bokeh_candlestick(df):
     source_inc = ColumnDataSource(df.loc[inc])
     source_dec = ColumnDataSource(df.loc[dec])
 
-    p = figure(x_axis_type="datetime", title="Candlestick Chart", plot_height=400, tools="pan,wheel_zoom,box_zoom,reset")
+    p = figure(
+        x_axis_type="datetime",
+        title="Candlestick Chart",
+        height=400,  # Corrected attribute
+        tools="pan,wheel_zoom,box_zoom,reset",
+    )
     p.xaxis.axis_label = "Date"
     p.yaxis.axis_label = "Price"
 
@@ -44,7 +49,13 @@ def plot_bokeh_candlestick(df):
     p.vbar(x="Date", top="Open", bottom="Close", width=width, fill_color="red", source=source_dec)
 
     hover = HoverTool(
-        tooltips=[("Date", "@Date{%F}"), ("Open", "@Open"), ("High", "@High"), ("Low", "@Low"), ("Close", "@Close")],
+        tooltips=[
+            ("Date", "@Date{%F}"),
+            ("Open", "@Open"),
+            ("High", "@High"),
+            ("Low", "@Low"),
+            ("Close", "@Close"),
+        ],
         formatters={"@Date": "datetime"},
     )
     p.add_tools(hover)

@@ -3,33 +3,27 @@ import requests
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# Binance API endpoint for OHLC data
-BINANCE_API_URL = "https://api.binance.com/api/v3/klines"
+# Function to fetch historical data from CoinGecko
+def fetch_coingecko_data(symbol="bitcoin", currency="usd", days="7", interval="hourly"):
+    """
+    Fetch OHLC data from CoinGecko API.
+    - symbol: The cryptocurrency slug (e.g., "bitcoin").
+    - currency: The fiat currency (e.g., "usd").
+    - days: Number of days of historical data to fetch (e.g., "1", "7", "max").
+    - interval: Data granularity ("hourly" or "daily").
+    """
+    url = f"https://api.coingecko.com/api/v3/coins/{symbol}/market_chart"
+    params = {"vs_currency": currency, "days": days, "interval": interval}
+    response = requests.get(url, params=params)
 
-# Function to fetch historical data from Binance
-def fetch_binance_data(symbol="BTCUSDT", interval="1h", limit=100):
-    params = {
-        "symbol": symbol,
-        "interval": interval,
-        "limit": limit
-    }
-    response = requests.get(BINANCE_API_URL, params=params)
     if response.status_code != 200:
-        raise Exception(f"Error fetching data from Binance: {response.json()}")
+        raise Exception(f"Error fetching data from CoinGecko: {response.json()}")
+
     data = response.json()
-    # Convert to DataFrame
-    df = pd.DataFrame(data, columns=[
-        "Open Time", "Open", "High", "Low", "Close", "Volume",
-        "Close Time", "Quote Asset Volume", "Number of Trades",
-        "Taker Buy Base Volume", "Taker Buy Quote Volume", "Ignore"
-    ])
-    # Process DataFrame
-    df["Open Time"] = pd.to_datetime(df["Open Time"], unit="ms")
-    df["Close"] = df["Close"].astype(float)
-    df["High"] = df["High"].astype(float)
-    df["Low"] = df["Low"].astype(float)
-    df["Volume"] = df["Volume"].astype(float)
-    return df[["Open Time", "Open", "High", "Low", "Close", "Volume"]]
+    prices = data["prices"]  # Get the timestamp and close price
+    df = pd.DataFrame(prices, columns=["timestamp", "Close"])
+    df["Open Time"] = pd.to_datetime(df["timestamp"], unit="ms")
+    return df[["Open Time", "Close"]]
 
 # Function to calculate indicators
 def calculate_indicators(df):
@@ -51,46 +45,48 @@ st.title("Crypto Price Analysis App")
 st.sidebar.header("Settings")
 
 # Sidebar inputs
-symbol = st.sidebar.text_input("Cryptocurrency Pair (e.g., BTCUSDT)", value="BTCUSDT")
-interval = st.sidebar.selectbox("Time Interval", options=["1m", "5m", "15m", "1h", "4h", "1d"], index=3)
-limit = st.sidebar.slider("Number of Candles", min_value=50, max_value=500, value=100)
+symbol = st.sidebar.text_input("Cryptocurrency Slug (e.g., bitcoin)", value="bitcoin")
+currency = st.sidebar.text_input("Fiat Currency (e.g., usd)", value="usd")
+days = st.sidebar.selectbox("Historical Data Range (Days)", options=["1", "7", "30", "90", "365"], index=1)
+interval = st.sidebar.selectbox("Data Granularity", options=["hourly", "daily"], index=0)
 
 # Fetch data when the user clicks the button
 if st.sidebar.button("Fetch Data"):
     with st.spinner("Fetching data..."):
         try:
-            df = fetch_binance_data(symbol, interval, limit)
+            # Fetch and process data
+            df = fetch_coingecko_data(symbol, currency, days, interval)
 
             # Ensure there are enough rows to calculate indicators
             if len(df) < 20:
-                st.error("Not enough data to calculate indicators. Try increasing the number of candles.")
+                st.error("Not enough data to calculate indicators. Try increasing the data range.")
             else:
                 df = calculate_indicators(df)
                 st.success("Data fetched and processed successfully!")
-                
+
                 # Display raw data
                 st.subheader("Raw Data")
                 st.dataframe(df.tail())
-                
+
                 # Plot closing price with Bollinger Bands
-                st.subheader(f"{symbol} Price and Bollinger Bands")
+                st.subheader(f"{symbol.capitalize()} Price and Bollinger Bands")
                 fig, ax = plt.subplots(figsize=(10, 5))
                 ax.plot(df["Open Time"], df["Close"], label="Close Price", color="blue")
                 ax.plot(df["Open Time"], df["Bollinger_Upper"], label="Upper Band", linestyle="--", color="red")
                 ax.plot(df["Open Time"], df["Bollinger_Lower"], label="Lower Band", linestyle="--", color="green")
                 ax.fill_between(df["Open Time"], df["Bollinger_Lower"], df["Bollinger_Upper"], color="lightgrey", alpha=0.3)
-                ax.set_title(f"{symbol} Bollinger Bands")
+                ax.set_title(f"{symbol.capitalize()} Bollinger Bands")
                 ax.legend()
                 st.pyplot(fig)
-                
+
                 # Plot RSI
                 if "RSI" not in df or df["RSI"].isna().all():
                     st.error("RSI cannot be calculated. Ensure enough data is available.")
                 else:
                     last_rsi = df["RSI"].iloc[-1]
-                    st.subheader(f"{symbol} Relative Strength Index (RSI)")
+                    st.subheader(f"{symbol.capitalize()} Relative Strength Index (RSI)")
                     st.line_chart(df["RSI"])
-                    
+
                     # RSI trigger messages
                     if last_rsi > 70:
                         st.warning("RSI indicates overbought conditions! Consider selling.")

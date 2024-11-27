@@ -1,7 +1,9 @@
 import streamlit as st
 import requests
 import pandas as pd
-import plotly.graph_objects as go
+from bokeh.plotting import figure
+from bokeh.models import ColumnDataSource, HoverTool
+import mplfinance as mpf
 
 # Fetch data from CoinGecko
 def fetch_coingecko_data(symbol="bitcoin", currency="usd", days="7", interval=None):
@@ -21,35 +23,33 @@ def fetch_coingecko_data(symbol="bitcoin", currency="usd", days="7", interval=No
     df["Open"] = df["Close"].shift(1).fillna(df["Close"])
     return df[["Open Time", "Open", "High", "Low", "Close"]]
 
-# Calculate technical indicators
-def calculate_indicators(df):
-    # Bollinger Bands
-    df["SMA_20"] = df["Close"].rolling(window=20).mean()
-    df["Bollinger_Upper"] = df["SMA_20"] + (2 * df["Close"].rolling(window=20).std())
-    df["Bollinger_Lower"] = df["SMA_20"] - (2 * df["Close"].rolling(window=20).std())
+# Plot candlestick chart using Bokeh
+def plot_bokeh_candlestick(df):
+    df["Date"] = df["Open Time"]
+    inc = df["Close"] > df["Open"]
+    dec = df["Open"] > df["Close"]
 
-    # RSI
-    delta = df["Close"].diff()
-    gain = delta.where(delta > 0, 0).rolling(14).mean()
-    loss = -delta.where(delta < 0, 0).rolling(14).mean()
-    rs = gain / loss
-    df["RSI"] = 100 - (100 / (1 + rs))
-    return df
+    source_inc = ColumnDataSource(df.loc[inc])
+    source_dec = ColumnDataSource(df.loc[dec])
 
-# Calculate Fibonacci retracement levels
-def calculate_fibonacci_levels(df):
-    max_price = df["High"].max()
-    min_price = df["Low"].min()
-    diff = max_price - min_price
-    levels = {
-        "0%": max_price,
-        "23.6%": max_price - 0.236 * diff,
-        "38.2%": max_price - 0.382 * diff,
-        "50%": max_price - 0.5 * diff,
-        "61.8%": max_price - 0.618 * diff,
-        "100%": min_price,
-    }
-    return levels
+    p = figure(x_axis_type="datetime", title="Candlestick Chart", plot_height=400, tools="pan,wheel_zoom,box_zoom,reset")
+    p.xaxis.axis_label = "Date"
+    p.yaxis.axis_label = "Price"
+
+    # Plot candles
+    width = 12 * 60 * 60 * 1000  # Half-day in ms
+    p.segment(x0="Date", y0="High", x1="Date", y1="Low", source=source_inc, color="green")
+    p.segment(x0="Date", y0="High", x1="Date", y1="Low", source=source_dec, color="red")
+    p.vbar(x="Date", top="Close", bottom="Open", width=width, fill_color="green", source=source_inc)
+    p.vbar(x="Date", top="Open", bottom="Close", width=width, fill_color="red", source=source_dec)
+
+    hover = HoverTool(
+        tooltips=[("Date", "@Date{%F}"), ("Open", "@Open"), ("High", "@High"), ("Low", "@Low"), ("Close", "@Close")],
+        formatters={"@Date": "datetime"},
+    )
+    p.add_tools(hover)
+
+    return p
 
 # Recommend trades
 def recommend_trade(df, fibonacci_levels, resistance, trend):
@@ -105,7 +105,7 @@ def recommend_trade(df, fibonacci_levels, resistance, trend):
     )
 
 # Streamlit UI
-st.title("Comprehensive Crypto Analysis with Trade Recommendations")
+st.title("Comprehensive Crypto Analysis with Improved Charts and Trade Recommendations")
 symbol = st.sidebar.text_input("Cryptocurrency Slug (e.g., bitcoin)", "bitcoin")
 currency = st.sidebar.text_input("Fiat Currency (e.g., usd)", "usd")
 days = st.sidebar.selectbox("Historical Data Range (Days)", ["7", "30", "90"], index=0)
@@ -114,107 +114,11 @@ if st.sidebar.button("Fetch Data"):
     try:
         # Fetch and process data
         df = fetch_coingecko_data(symbol, currency, days)
-        df = calculate_indicators(df)
-        fibonacci_levels = calculate_fibonacci_levels(df)
-        resistance = df["High"].rolling(10).max().iloc[-1]
-        trend = "uptrend" if df["Close"].iloc[-1] > df["SMA_20"].iloc[-1] else "downtrend"
 
-        # Get trade recommendations
-        (
-            recommendation,
-            entry_price,
-            stop_loss,
-            take_profit,
-            counter_recommendation,
-            counter_entry_price,
-            counter_stop_loss,
-            counter_take_profit,
-        ) = recommend_trade(df, fibonacci_levels, resistance, trend)
-
-        # Display candlestick chart with indicators
-        st.subheader(f"{symbol.capitalize()} Candlestick Chart with Indicators")
-        fig = go.Figure()
-
-        # Add candlestick
-        fig.add_trace(
-            go.Candlestick(
-                x=df["Open Time"],
-                open=df["Open"],
-                high=df["High"],
-                low=df["Low"],
-                close=df["Close"],
-                name="Candlesticks",
-            )
-        )
-
-        # Add Bollinger Bands
-        fig.add_trace(
-            go.Scatter(
-                x=df["Open Time"],
-                y=df["Bollinger_Upper"],
-                mode="lines",
-                line=dict(color="blue", dash="dot"),
-                name="Bollinger Upper",
-            )
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=df["Open Time"],
-                y=df["Bollinger_Lower"],
-                mode="lines",
-                line=dict(color="blue", dash="dot"),
-                name="Bollinger Lower",
-            )
-        )
-
-        # Add Fibonacci levels
-        for level, value in fibonacci_levels.items():
-            fig.add_hline(
-                y=value,
-                line_dash="dot",
-                annotation_text=level,
-                annotation_position="right",
-                line_color="green",
-            )
-
-        # Add resistance level
-        fig.add_hline(
-            y=resistance, line_dash="dot", annotation_text="Resistance", line_color="red"
-        )
-
-        fig.update_layout(
-            title=f"{symbol.capitalize()} Candlestick Chart with Indicators",
-            xaxis_title="Date",
-            yaxis_title=f"Price ({currency.upper()})",
-            template="plotly_dark",
-        )
-        st.plotly_chart(fig)
-
-        # Display RSI as a separate chart
-        st.subheader(f"{symbol.capitalize()} Relative Strength Index (RSI)")
-        st.line_chart(df["RSI"])
-
-        # Display Trade Recommendations
-        st.subheader("Primary Trade Recommendation")
-        st.write(f"**Primary Recommendation**: {recommendation}")
-        st.write(f"Entry: {entry_price:.2f}")
-        st.write(f"Stop Loss: {stop_loss:.2f}")
-        st.write(
-            f"Take Profit: {take_profit:.2f}" if take_profit is not None else "Take Profit: N/A"
-        )
-
-        st.subheader("Counter Trade Recommendation")
-        if counter_recommendation:
-            st.write(f"**Counter Recommendation**: {counter_recommendation}")
-            st.write(f"Entry: {counter_entry_price:.2f}")
-            st.write(f"Stop Loss: {counter_stop_loss:.2f}")
-            st.write(
-                f"Take Profit: {counter_take_profit:.2f}"
-                if counter_take_profit is not None
-                else "Take Profit: N/A"
-            )
-        else:
-            st.write("No counter trade recommendation available.")
+        # Plot candlestick chart
+        st.subheader(f"{symbol.capitalize()} Candlestick Chart")
+        bokeh_chart = plot_bokeh_candlestick(df)
+        st.bokeh_chart(bokeh_chart)
 
     except Exception as e:
         st.error(f"An error occurred: {e}")

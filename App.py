@@ -6,9 +6,6 @@ import plotly.graph_objects as go
 
 # Function to fetch historical data from CoinGecko
 def fetch_coingecko_data(symbol="bitcoin", currency="usd", days="7", interval=None):
-    """
-    Fetch OHLC data from CoinGecko API.
-    """
     url = f"https://api.coingecko.com/api/v3/coins/{symbol}/market_chart"
     params = {"vs_currency": currency, "days": days}
     if interval and int(days) >= 2 and int(days) <= 90:
@@ -47,18 +44,14 @@ def calculate_resistance_levels(df):
     resistance = highs[-10:].max()  # Recent significant resistance level
     return resistance
 
-# Function to calculate trend lines
-def calculate_trend_lines(df):
-    recent_high = df["High"].iloc[-1]
-    recent_low = df["Low"].iloc[-1]
-    trend = "uptrend" if recent_high > recent_low else "downtrend"
-    return trend
-
 # Function to calculate indicators (RSI, Bollinger Bands)
 def calculate_indicators(df):
+    # Bollinger Bands
     df["SMA_20"] = df["Close"].rolling(window=20).mean()
     df["Bollinger_Upper"] = df["SMA_20"] + (2 * df["Close"].rolling(window=20).std())
     df["Bollinger_Lower"] = df["SMA_20"] - (2 * df["Close"].rolling(window=20).std())
+    
+    # RSI
     delta = df["Close"].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -75,21 +68,25 @@ def recommend_trade(df, fibonacci_levels, resistance, trend):
     stop_loss = None
     take_profit = None
 
-    if trend == "uptrend" and rsi < 30:
+    if trend == "uptrend" and rsi < 30:  # Buy signal
         recommendation = "Buy"
         stop_loss = fibonacci_levels["61.8%"]
         take_profit = resistance
-    elif trend == "downtrend" and rsi > 70:
+    elif trend == "downtrend" and rsi > 70:  # Sell signal
         recommendation = "Sell"
         stop_loss = resistance
         take_profit = fibonacci_levels["61.8%"]
-    else:
+    else:  # Hold signal
         recommendation = "Hold"
-    
+
+    # Ensure a fallback stop-loss
+    if stop_loss is None:
+        stop_loss = last_price * 0.98  # Default to 2% below the current price
+
     return recommendation, entry_price, stop_loss, take_profit
 
 # Streamlit app setup
-st.title("Advanced Crypto Analysis with Trade Recommendations")
+st.title("Comprehensive Crypto Analysis with Indicators")
 st.sidebar.header("Settings")
 
 # Sidebar inputs
@@ -102,7 +99,6 @@ interval = st.sidebar.selectbox("Data Granularity", options=["daily", "hourly"],
 if st.sidebar.button("Fetch Data"):
     with st.spinner("Fetching data..."):
         try:
-            # Fetch and process data
             df = fetch_coingecko_data(symbol, currency, days, interval)
 
             if len(df) < 20:
@@ -111,19 +107,12 @@ if st.sidebar.button("Fetch Data"):
                 df = calculate_indicators(df)
                 fibonacci_levels = calculate_fibonacci_levels(df)
                 resistance = calculate_resistance_levels(df)
-                trend = calculate_trend_lines(df)
-                recommendation, entry_price, stop_loss, take_profit = recommend_trade(
-                    df, fibonacci_levels, resistance, trend
-                )
 
-                # Display raw data
-                st.subheader("Raw Data")
-                st.dataframe(df.tail())
-
-                # Plot candlestick chart with Fibonacci levels
-                st.subheader(f"{symbol.capitalize()} Candlestick Chart with Fibonacci and Resistance")
+                # Candlestick chart with Fibonacci levels, Bollinger Bands, and Resistance
+                st.subheader(f"{symbol.capitalize()} Candlestick Chart with Indicators")
                 fig = go.Figure()
 
+                # Add candlestick chart
                 fig.add_trace(
                     go.Candlestick(
                         x=df["Open Time"],
@@ -135,6 +124,27 @@ if st.sidebar.button("Fetch Data"):
                     )
                 )
 
+                # Add Bollinger Bands
+                fig.add_trace(
+                    go.Scatter(
+                        x=df["Open Time"],
+                        y=df["Bollinger_Upper"],
+                        mode="lines",
+                        line=dict(color="blue", dash="dot"),
+                        name="Bollinger Upper",
+                    )
+                )
+                fig.add_trace(
+                    go.Scatter(
+                        x=df["Open Time"],
+                        y=df["Bollinger_Lower"],
+                        mode="lines",
+                        line=dict(color="blue", dash="dot"),
+                        name="Bollinger Lower",
+                    )
+                )
+
+                # Add Fibonacci levels
                 for level, value in fibonacci_levels.items():
                     fig.add_hline(
                         y=value,
@@ -144,22 +154,22 @@ if st.sidebar.button("Fetch Data"):
                         line_color="green",
                     )
 
-                fig.add_hline(y=resistance, line_dash="dot", annotation_text="Resistance", line_color="red")
+                # Add resistance level
+                fig.add_hline(
+                    y=resistance, line_dash="dot", annotation_text="Resistance", line_color="red"
+                )
 
                 fig.update_layout(
-                    title=f"{symbol.capitalize()} Candlestick Chart with Fibonacci and Resistance",
+                    title=f"{symbol.capitalize()} Candlestick Chart with Indicators",
                     xaxis_title="Date",
                     yaxis_title=f"Price ({currency.upper()})",
                     template="plotly_dark",
                 )
                 st.plotly_chart(fig)
 
-                # Display trade recommendation
-                st.subheader("Trade Recommendation")
-                st.write(f"**Recommendation**: {recommendation}")
-                st.write(f"**Entry Price**: {entry_price:.2f}")
-                st.write(f"**Stop Loss**: {stop_loss:.2f}")
-                st.write(f"**Take Profit**: {take_profit:.2f}")
+                # Display RSI as a separate chart
+                st.subheader(f"{symbol.capitalize()} Relative Strength Index (RSI)")
+                st.line_chart(df["RSI"])
 
         except Exception as e:
             st.error(f"An error occurred: {e}")

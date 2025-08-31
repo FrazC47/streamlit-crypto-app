@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  email        String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  preferences  Preferences?
+  analyses     Analysis[]
+  memberships  Membership[]
+  notifications Notification[]
+}
+
+model Preferences {
+  id              Int    @id @default(autoincrement())
+  favoriteSymbols String @default("[]")
+  userId          Int    @unique
+  user            User   @relation(fields: [userId], references: [id])
+}
+
+model Analysis {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  symbol    String
+  interval  String
+  result    Json
+  createdAt DateTime @default(now())
+  shared    SharedAnalysis?
+}
+
+model Team {
+  id        Int          @id @default(autoincrement())
+  name      String
+  createdAt DateTime     @default(now())
+  memberships Membership[]
+  auditLogs  AuditLog[]
+  sharedAnalyses SharedAnalysis[]
+}
+
+model Membership {
+  id     Int    @id @default(autoincrement())
+  team   Team   @relation(fields: [teamId], references: [id])
+  teamId Int
+  user   User   @relation(fields: [userId], references: [id])
+  userId Int
+  role   String @default("member")
+}
+
+model SharedAnalysis {
+  id         Int      @id @default(autoincrement())
+  team       Team     @relation(fields: [teamId], references: [id])
+  teamId     Int
+  analysis   Analysis @relation(fields: [analysisId], references: [id])
+  analysisId Int      @unique
+  createdAt  DateTime @default(now())
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  team      Team     @relation(fields: [teamId], references: [id])
+  teamId    Int
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    Int?
+  action    String
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  type      String
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
